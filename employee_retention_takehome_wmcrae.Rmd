@@ -1,0 +1,226 @@
+---
+title: "Employee Retention"
+author: "Willie McRae"
+date: "25 July 2016"
+output: html_document
+---
+# Data Science Meetup - Imperial Museum 25th July 
+This was my approach during the meetup. I focused mainly on exploratory views.
+
+# Outline
+Running through Exercise 3 from the excellent [A collection of Data Science Take-home Challenges](http://datascientistjobinterview.com/)
+
+1. Assume, for each company, that the headcount starts from zero on 2011/01/23. 
+2. Estimate employee headcount, for each company, on each day, from 2011/01/24 to 2015/12/13.
+That is, if by 2012/03/02 2000 people have joined company 1 and 1000 of them have
+already quit, then company headcount on 2012/03/02 for company 1 would be 1000.
+3. You should create a table with 3 columns: day, employee_headcount, company_id.
+4. What are the main factors that drive employee churn? Do they make sense? Explain your
+findings.
+5. If you could add to this data set just one variable that could help explain employee churn,
+what would that be?
+
+
+# Load
+``` {r load, warning = FALSE, message = FALSE}
+# Set directory
+setwd("/Users/wbidst/Desktop/R/Employee_Retention")
+
+# Load packages
+install.packages("plyr", repos="http://cran.rstudio.com/")
+library(plyr)
+install.packages("dplyr", repos="http://cran.rstudio.com/")
+library(dplyr)
+install.packages("stringr", repos="http://cran.rstudio.com/")
+library(stringr)
+install.packages("tidyr", repos="http://cran.rstudio.com/")
+library(tidyr)
+install.packages("ggplot2", repos="http://cran.rstudio.com/")
+library(ggplot2)
+install.packages("lubridate", repos="http://cran.rstudio.com/")
+library(lubridate)
+install.packages("rattle", repos="http://cran.rstudio.com/")
+library(rattle) 
+install.packages("rpart.plot", repos="http://cran.rstudio.com/")
+library(rpart.plot)
+install.packages("RColorBrewer",repos="http://cran.rstudio.com/")
+library(RColorBrewer) 
+library(rpart) 
+
+# Load data
+d <- read.csv("employee_retention_data.csv", header = TRUE)
+
+```
+
+
+# Clean
+``` {r clean}
+# Check structure
+str(d)
+summary(d)
+
+# Add a variable for Exited 'Status' - H = Hardcore, still employed Q = Quitter
+d$status <- ifelse(d$quit_date == "NA", "H", "Q")
+d$status[which(is.na(d$status))] <- "H"
+d$status <- as.factor(d$status)
+str(d)
+
+
+# Correct class of columns with dates
+d$join_date <- as.Date(d$join_date)
+d$quit_date <- as.Date(d$quit_date) 
+
+
+# Add a variable called tenure
+# First change the NA values to a new date, later than the latest date
+d2 <- d # Keeping d as my backup!
+d2$quit_date[which(is.na(d$quit_date))] <- "2016-07-25"
+d2$tenure <- d2$quit_date - d2$join_date
+d2$tenure <- as.numeric(d2$tenure) 
+
+summary(d2)
+# Quitters and Hardcore 
+
+quitters <- filter(d2, status == "Q")
+summary(quitters)
+hardcore <- filter(d2, status == "H")
+summary(hardcore)
+```
+
+
+# Tidy
+``` {r tidy}
+# All rows are observations, all columns are variables - nothing to do here??
+# Did not get to actually create the table suggested in exercise
+```
+
+
+# Explore 
+``` {r explore}
+require(scales)
+
+# Basic visualizations
+## Histograms
+### Salary
+ggplot(data = d, aes(x = salary)) +
+  geom_histogram() +
+  facet_wrap(~ company_id, nrow = 4) +
+  scale_x_continuous(labels = comma)
+
+ggplot(data = d, aes(x = salary, fill = status)) +
+  geom_histogram(position = "fill") +
+  facet_wrap(~ company_id, nrow = 4) +
+  scale_x_continuous(labels = comma) # People paid a lot don't exit??
+
+### Seniority
+ggplot(data = d, aes(x = seniority)) +
+  geom_histogram() +
+  facet_wrap(~ company_id, nrow = 4) +
+  scale_x_continuous(labels = comma)
+
+ggplot(data = d, aes(x = seniority, fill = status)) +
+  geom_histogram(position = "fill") +
+  facet_wrap(~ company_id, nrow = 4) +
+  scale_x_continuous(labels = comma) 
+
+### Tenure
+ggplot(data = d2, aes(x = tenure)) +
+  geom_histogram() +
+  facet_wrap(~ company_id, nrow = 4) +
+  scale_x_continuous(labels = comma)
+
+ggplot(data = d2, aes(x = tenure, fill = status)) +
+  geom_histogram(position = "fill") +
+  facet_wrap(~ company_id, nrow = 4) +
+  scale_x_continuous(labels = comma) 
+
+# Scatter plots
+ggplot(data = d, aes(x = seniority, y = salary, col = status)) +
+  geom_point(shape = 21, alpha = 0.5, position = "jitter") +
+  scale_y_continuous(labels = comma) +
+  facet_grid(.~ status) 
+
+ggplot(data = d, aes(x = factor(company_id), y = salary, col = status)) +
+  geom_point(alpha = 0.5, position = "jitter") +
+  scale_y_continuous(labels = comma) +
+  facet_grid(.~ status) # There are a couple of outliers in company 1 and 10 (super senior people?)
+
+ggplot(data = d, aes(x = seniority, y = salary, col = status)) +
+  geom_point(alpha = 0.5, position = "jitter") +
+  scale_y_continuous() +
+  facet_grid(company_id ~ status)
+
+# Bar plots
+ggplot(data = d, aes(x = company_id, y = salary, fill = status, group = status)) +
+  geom_bar(stat = "identity", position = "stack") 
+
+
+# Box plots
+ggplot(data = d2, aes(x = factor(company_id), y = tenure, fill = status)) +
+  geom_boxplot() 
+
+ggplot(data = d2, aes(x = factor(company_id), y = salary, fill = status)) +
+  geom_boxplot() 
+
+ggplot(data = d2, aes(x = factor(dept), y = tenure, fill = status)) +
+  geom_boxplot() 
+
+ggplot(data = d2, aes(x = factor(dept), y = salary, fill = status)) +
+  geom_boxplot() 
+
+# A quick look at tenure
+ggplot(data = d2, aes(x = join_date, y = quit_date, fill = status)) +
+  geom_point(shape = 21, alpha = 0.5) +
+  geom_smooth()
+
+ggplot(data = filter(d2, status == "Q"), aes(x = factor(company_id), y = tenure, fill = status)) +
+  geom_boxplot() 
+
+```
+
+
+# Estimate headcount per company per day 
+``` {r estimate_peoplecount}
+# Create table that shows headcount flux by company
+
+# Start with a vector of every day
+Days <- seq(as.Date("2011-01-24"), as.Date("2015-12-13"), by = "days")
+
+# Now, create a blank dataframe
+daydf <- data.frame(Date = Days)
+
+# Try ifelse statements to populate (only need company_id and employee_headcount)
+# Gave up on this did not prioritize
+
+```
+
+
+# Identify key variables in churn 
+``` {r identify_variables1}
+# Which variables are most important in determining exit?
+
+tree <- rpart(status ~ company_id +seniority + salary + tenure + dept, data = d2, method = "class")
+fancyRpartPlot(tree) # Tenure appears to be the best predictive variable. 
+
+tree2 <- rpart(status ~ company_id + seniority + salary + dept, data = d2, method = "class")
+fancyRpartPlot(tree2) # High salaries stick around
+
+
+```
+
+
+# Add new variable 
+``` {r identify_variables}
+# What new variable might help explain churn
+# I think the tenure variable added does this nicely
+# Would like to see 'date last promoted' or something similar
+
+```
+
+
+# Build predictive model 
+``` {r build}
+# Which variables are most important in determining exit? Apply these to the remaining set.
+# Would like to apply characteristics of Quitters to Hardcore - did not get to this.
+
+```
